@@ -1,0 +1,1447 @@
+/********************************************************************************
+** Form generated from reading UI file 'BotControlWidget.ui'
+**
+** Created by: Qt User Interface Compiler version 5.15.17
+**
+** WARNING! All changes made in this file will be lost when recompiling UI file!
+********************************************************************************/
+
+#ifndef UI_BOTCONTROLWIDGET_H
+#define UI_BOTCONTROLWIDGET_H
+
+#include <QtCore/QVariant>
+#include <QtWidgets/QApplication>
+#include <QtWidgets/QHBoxLayout>
+#include <QtWidgets/QPushButton>
+#include <QtWidgets/QWidget>
+
+QT_BEGIN_NAMESPACE
+
+class Ui_BotControlWidget
+{
+public:
+    QWidget *horizontalLayoutWidget;
+    QHBoxLayout *horizontalLayout;
+    QPushButton *StartButton;
+    QPushButton *PauseButton;
+    QPushButton *StopButton;
+
+    void setupUi(QWidget *BotControlWidget)
+    {
+        if (BotControlWidget->objectName().isEmpty())
+            BotControlWidget->setObjectName(QString::fromUtf8("BotControlWidget"));
+        BotControlWidget->resize(255, 42);
+        horizontalLayoutWidget = new QWidget(BotControlWidget);
+        horizontalLayoutWidget->setObjectName(QString::fromUtf8("horizontalLayoutWidget"));
+        horizontalLayoutWidget->setGeometry(QRect(0, 0, 254, 41));
+        horizontalLayout = new QHBoxLayout(horizontalLayoutWidget);
+        horizontalLayout->setObjectName(QString::fromUtf8("horizontalLayout"));
+        horizontalLayout->setContentsMargins(0, 0, 0, 0);
+        StartButton = new QPushButton(horizontalLayoutWidget);
+        StartButton->setObjectName(QString::fromUtf8("StartButton"));
+
+        horizontalLayout->addWidget(StartButton);
+
+        PauseButton = new QPushButton(horizontalLayoutWidget);
+        PauseButton->setObjectName(QString::fromUtf8("PauseButton"));
+
+        horizontalLayout->addWidget(PauseButton);
+
+        StopButton = new QPushButton(horizontalLayoutWidget);
+        StopButton->setObjectName(QString::fromUtf8("StopButton"));
+
+        horizontalLayout->addWidget(StopButton);
+
+
+        retranslateUi(BotControlWidget);
+
+        QMetaObject::connectSlotsByName(BotControlWidget);
+    } // setupUi
+
+    void retranslateUi(QWidget *BotControlWidget)
+    {
+        BotControlWidget->setWindowTitle(QCoreApplication::translate("BotControlWidget", "Form", nullptr));
+        StartButton->setText(QCoreApplication::translate("BotControlWidget", "Start", nullptr));
+        PauseButton->setText(QCoreApplication::translate("BotControlWidget", "Pause", nullptr));
+        StopButton->setText(QCoreApplication::translate("BotControlWidget", "Stop", nullptr));
+    } // retranslateUi
+
+};
+
+namespace Ui {
+    class BotControlWidget: public Ui_BotControlWidget {};
+} // namespace Ui
+
+QT_END_NAMESPACE
+
+#endif // UI_BOTCONTROLWIDGET_H
+#include "TradingController.h"
+#include "TradingBot.h"
+
+#include "trading/event/type/StartEvent.h"
+#include "trading/event/type/StopEvent.h"
+#include "trading/event/type/PauseEvent.h"
+#include "trading/event/type/UnpauseEvent.h"
+
+TradingController::TradingController(QObject *parent)
+    : QObject{parent}
+    , tradingBot{nullptr}
+    , eventHandler{new EventHandler{this}}
+    , eventObserver{new EventObserver{eventHandler, this}}
+    , isPaused{false}
+    , isActive{false}
+{}
+
+void TradingController::registerListener(IEventListener *listener)
+{
+    eventHandler->subscribe(listener);
+}
+
+void TradingController::onStartPress()
+{
+    if (isActive)
+        return;
+
+    eventHandler->reset();
+
+    if (tradingBot)
+        delete tradingBot;
+
+    TradingBot *newBot = TradingBot::create(this);
+    tradingBot = newBot;
+
+    eventObserver->raiseEvent(StartEvent{});
+    isActive = true;
+
+    emit started();
+}
+
+void TradingController::onPausePress()
+{
+    if (!tradingBot || !isActive)
+        return;
+
+    if (isPaused) {
+        eventObserver->raiseEvent( UnpauseEvent{} );
+        isPaused = false;
+        emit unpaused();
+    }
+
+    else {
+        eventObserver->raiseEvent( PauseEvent{} );
+        isPaused = true;
+        emit paused();
+    }
+}
+
+void TradingController::onStopPress()
+{
+    if (!tradingBot || !isActive)
+        return;
+
+    eventObserver->raiseEvent( StopEvent{} );
+
+    delete tradingBot;
+    tradingBot = nullptr;
+
+    isActive = false;
+    isPaused = false;
+
+    emit stopped();
+}
+
+#ifndef TRADINGSTRATEGY_H
+#define TRADINGSTRATEGY_H
+
+#include <QObject>
+
+#include "trading/api/TradingAPI.h"
+#include "trading/TradingController.h"
+#include "trading/event/type/CandleCloseEvents.h"
+#include "trading/event/type/StartEvent.h"
+#include "trading/event/type/PauseEvent.h"
+#include "trading/event/type/UnpauseEvent.h"
+#include "trading/event/type/StopEvent.h"
+#include "trading/TradingBot.h"
+
+using On = Event::On;
+
+class TradingBot;
+
+class TradingStrategy : public QObject
+{
+    Q_OBJECT
+public:
+    explicit TradingStrategy(TradingAPI *api, TradingBot *tradingBot)
+        : QObject{tradingBot}, API(api)
+    {
+        tradingBot->listenTo(this, On::Stop);
+    }
+
+    virtual void on_Start(const StartEvent&) {}
+    virtual void on_Pause(const PauseEvent&) {}
+    virtual void on_Unpause(const UnpauseEvent&) {}
+    virtual void on_Stop(const StopEvent&) {}
+
+    virtual void on_m1CandleClose(const m1CandleCloseEvent&) {}
+    virtual void on_m5CandleClose(const m5CandleCloseEvent&) {}
+    virtual void on_m15CandleClose(const m15CandleCloseEvent&) {}
+    virtual void on_m30CandleClose(const m30CandleCloseEvent&) {}
+    virtual void on_H1CandleClose(const H1CandleCloseEvent&) {}
+    virtual void on_H2CandleClose(const H2CandleCloseEvent&) {}
+    virtual void on_H4CandleClose(const H4CandleCloseEvent&) {}
+    virtual void on_H8CandleClose(const H8CandleCloseEvent&) {}
+    virtual void on_H12CandleClose(const H12CandleCloseEvent&) {}
+    virtual void on_D1CandleClose(const D1CandleCloseEvent&) {}
+    virtual void on_W1CandleClose(const W1CandleCloseEvent&) {}
+    virtual void on_M1CandleClose(const M1CandleCloseEvent&) {}
+    virtual void on_M4CandleClose(const M4CandleCloseEvent&) {}
+    virtual void on_M6CandleClose(const M6CandleCloseEvent&) {}
+    virtual void on_Y1CandleClose(const Y1CandleCloseEvent&) {}
+
+protected:
+    TradingAPI *API;
+};
+
+#endif // TRADINGSTRATEGY_H
+#ifndef TRADINGAPI_H
+#define TRADINGAPI_H
+
+#include "WebAPI.h"
+
+class TradingAPI : public WebAPI
+{
+    Q_OBJECT
+public:
+    explicit TradingAPI(QObject *parent = nullptr);
+};
+
+#endif // TRADINGAPI_H
+#include "TradingAPI.h"
+
+TradingAPI::TradingAPI(QObject *parent)
+    : WebAPI{parent}
+{}
+#include "WebAPI.h"
+
+#ifndef WEBAPI_H
+#define WEBAPI_H
+
+#include <QObject>
+#include <QJsonObject>
+#include <QNetworkAccessManager>
+#include <QNetworkReply>
+#include <QNetworkRequest>
+#include <QUrl>
+#include <QUrlQuery>
+#include <QJsonDocument>
+#include <QList>
+#include <functional>
+#include <QHash>
+
+
+class WebAPI : public QObject {
+    Q_OBJECT
+
+protected:
+    using Callback = std::function<void(QNetworkReply*)>;
+
+    explicit WebAPI(QObject *parent = nullptr)
+        : QObject{parent}, m_manager(new QNetworkAccessManager(this)) {
+        connect(m_manager, &QNetworkAccessManager::finished, this, &WebAPI::onFinished);
+    }
+
+    void get(const QString &endpoint, std::initializer_list<QPair<QString, QString>> headers = {}, Callback callback = nullptr) {
+        sendRequest(QNetworkAccessManager::GetOperation, endpoint, QJsonObject(), headers, callback);
+    }
+
+    void post(const QString &endpoint, const QJsonObject &body, std::initializer_list<QPair<QString, QString>> headers = {}, Callback callback = nullptr) {
+        sendRequest(QNetworkAccessManager::PostOperation, endpoint, body, headers, callback);
+    }
+
+    void put(const QString &endpoint, const QJsonObject &body, std::initializer_list<QPair<QString, QString>> headers = {}, Callback callback = nullptr) {
+        sendRequest(QNetworkAccessManager::PutOperation, endpoint, body, headers, callback);
+    }
+
+    void deleteRequest(const QString &endpoint, std::initializer_list<QPair<QString, QString>> headers = {}, Callback callback = nullptr) {
+        sendRequest(QNetworkAccessManager::DeleteOperation, endpoint, QJsonObject(), headers, callback);
+    }
+
+private:
+    void sendRequest(QNetworkAccessManager::Operation operation,
+                     const QString &endpoint,
+                     const QJsonObject &body,
+                     std::initializer_list<QPair<QString, QString>> headers,
+                     Callback callback) {
+
+        QNetworkRequest request(endpoint);
+        QSet<QString> uniqueKeys;
+        for (const auto &header : headers) {
+            if (!header.first.isEmpty() && !uniqueKeys.contains(header.first)) {
+                request.setRawHeader(header.first.toUtf8(), header.second.toUtf8());
+                uniqueKeys.insert(header.first);
+            }
+        }
+
+        QNetworkReply *reply = nullptr;
+
+        if (operation == QNetworkAccessManager::PostOperation || operation == QNetworkAccessManager::PutOperation) {
+            request.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
+            QJsonDocument doc(body);
+            QByteArray data = doc.toJson();
+            reply = m_manager->sendCustomRequest(request, operationName(operation), data);
+        } else {
+            reply = m_manager->sendCustomRequest(request, operationName(operation));
+        }
+
+        if (callback && reply) {
+            m_callbacks.insert(reply, callback);
+        }
+    }
+
+    QByteArray operationName(QNetworkAccessManager::Operation operation) const {
+        switch (operation) {
+        case QNetworkAccessManager::PostOperation: return "POST";
+        case QNetworkAccessManager::GetOperation: return "GET";
+        case QNetworkAccessManager::PutOperation: return "PUT";
+        case QNetworkAccessManager::DeleteOperation: return "DELETE";
+        default: return "";
+        }
+    }
+
+private slots:
+    void onFinished(QNetworkReply *reply) {
+        if (m_callbacks.contains(reply)) {
+            m_callbacks[reply](reply);
+            m_callbacks.remove(reply);
+        }
+        reply->deleteLater();
+    }
+
+private:
+    QNetworkAccessManager *m_manager;
+    QHash<QNetworkReply*, Callback> m_callbacks;
+};
+
+#endif // WEBAPI_H
+#ifndef TIMEFRAME_H
+#define TIMEFRAME_H
+
+enum class TimeFrame {
+    m1,
+    m5,
+    m15,
+    m30,
+    H1,
+    H2,
+    H4,
+    H8,
+    H12,
+    D1,
+    W1,
+    M1,
+    M4,
+    M6,
+    Y1,
+};
+
+#endif // TIMEFRAME_H
+#ifndef CANDLE_H
+#define CANDLE_H
+
+#include <QDateTime>
+#include "TimeFrame.h"
+
+class Candle
+{
+public:
+    QString symbol;
+    TimeFrame timeframe;
+
+    QDateTime openTime;
+    double open = 0.0;
+    double high = 0.0;
+    double low = 0.0;
+    double close = 0.0;
+    double volume = 0.0;
+};
+
+#endif // CANDLE_H
+#ifndef TRADINGCONTROLLER_H
+#define TRADINGCONTROLLER_H
+
+#include <QObject>
+
+#include "trading/event/EventHandler.h"
+#include "trading/event/EventObserver.h"
+
+class TradingBot;
+
+class TradingController : public QObject
+{
+    Q_OBJECT
+public:
+    explicit TradingController(QObject *parent = nullptr);
+
+    void registerListener(IEventListener *listener);
+
+public slots:
+    void onStartPress();
+    void onStopPress();
+    void onPausePress();
+private:
+    TradingBot *tradingBot;
+    EventHandler *eventHandler;
+    EventObserver *eventObserver;
+
+    bool isPaused;
+    bool isActive;
+
+signals:
+    void started();
+    void paused();
+    void unpaused();
+    void stopped();
+};
+
+#endif // TRADINGCONTROLLER_H
+#ifndef APPLICATION_H
+#define APPLICATION_H
+
+#include "trading/TradingBot.h"
+#include "trading/api/TradingAPI.h"
+
+template <typename TStrategy, typename TApi>
+class Application : public TradingBot
+{
+    static_assert(std::is_base_of<TradingStrategy, TStrategy>::value, "TStrategy must inherit from TradingStrategy");
+    static_assert(std::is_base_of<TradingAPI, TApi>::value, "TApi must inherit from TradingAPI");
+public:
+    explicit Application(TradingController *controller)
+        : TradingBot{&strategy, controller}
+        , api{}
+        , strategy(&api, this)
+    {}
+
+private:
+    TApi api;
+    TStrategy strategy;
+};
+
+namespace DynalgoApplication {
+    template<typename Strategy, typename Api>
+    static void Start()
+    {
+        TradingBot::setFactory([=](TradingController *controller){
+            return new Application<Strategy, Api>{controller};
+        });
+    }
+}
+
+#endif // APPLICATION_H
+#include "TradingBot.h"
+#include "trading/event/listener/CandleCloseEventListeners.h"
+#include "trading/event/listener/StartEventListener.h"
+#include "trading/event/listener/PauseEventListener.h"
+#include "trading/event/listener/UnpauseEventListener.h"
+#include "trading/event/listener/StopEventListener.h"
+#include "trading/TradingStrategy.h"
+
+std::function<TradingBot*(TradingController*)> TradingBot::FACTORY = nullptr;
+
+TradingBot::TradingBot(TradingStrategy *strategy, TradingController *controller)
+    : QObject{controller}
+    , controller{controller}
+    , strategy{strategy}
+{
+}
+
+void TradingBot::setFactory(std::function<TradingBot*(TradingController*)> factory)
+{
+    FACTORY = std::move(factory);
+}
+
+TradingBot *TradingBot::create(TradingController* controller)
+{
+    if (FACTORY)
+        return FACTORY(controller);
+    else
+        return nullptr;
+}
+
+void TradingBot::listenTo(TradingStrategy* strategy, std::initializer_list<Event::On> eventTypes)
+{
+    for (auto eventType : eventTypes) {
+        listenTo(strategy, eventType);
+    }
+}
+
+void TradingBot::subscribe(IEventListener *listener)
+{
+    controller->registerListener(listener);
+}
+
+
+void TradingBot::listenTo(TradingStrategy* strategy, Event::On eventType)
+{
+    using ListenerFactory = std::function<IEventListener*()>;
+
+    static const std::unordered_map<Event::On, ListenerFactory> factoryMap = {
+        { Event::On::Start,        [=]() { return new StartEventListener([=](const StartEvent& e) { strategy->on_Start(e); }); } },
+        { Event::On::Pause,        [=]() { return new PauseEventListener([=](const PauseEvent& e) { strategy->on_Pause(e); }); } },
+        { Event::On::Unpause,      [=]() { return new UnpauseEventListener([=](const UnpauseEvent& e) { strategy->on_Unpause(e); }); } },
+        { Event::On::Stop,         [=]() { return new StopEventListener([=](const StopEvent& e) { strategy->on_Stop(e); }); } },
+
+        { Event::On::m1CandleClose,  [=]() { return new m1CandleCloseEventListener([=](const m1CandleCloseEvent& e) { strategy->on_m1CandleClose(e); }); } },
+        { Event::On::m5CandleClose,  [=]() { return new m5CandleCloseEventListener([=](const m5CandleCloseEvent& e) { strategy->on_m5CandleClose(e); }); } },
+        { Event::On::m15CandleClose, [=]() { return new m15CandleCloseEventListener([=](const m15CandleCloseEvent& e) { strategy->on_m15CandleClose(e); }); } },
+        { Event::On::m30CandleClose, [=]() { return new m30CandleCloseEventListener([=](const m30CandleCloseEvent& e) { strategy->on_m30CandleClose(e); }); } },
+
+        { Event::On::H1CandleClose,  [=]() { return new H1CandleCloseEventListener([=](const H1CandleCloseEvent& e) { strategy->on_H1CandleClose(e); }); } },
+        { Event::On::H2CandleClose,  [=]() { return new H2CandleCloseEventListener([=](const H2CandleCloseEvent& e) { strategy->on_H2CandleClose(e); }); } },
+        { Event::On::H4CandleClose,  [=]() { return new H4CandleCloseEventListener([=](const H4CandleCloseEvent& e) { strategy->on_H4CandleClose(e); }); } },
+        { Event::On::H8CandleClose,  [=]() { return new H8CandleCloseEventListener([=](const H8CandleCloseEvent& e) { strategy->on_H8CandleClose(e); }); } },
+        { Event::On::H12CandleClose, [=]() { return new H12CandleCloseEventListener([=](const H12CandleCloseEvent& e) { strategy->on_H12CandleClose(e); }); } },
+
+        { Event::On::D1CandleClose,  [=]() { return new D1CandleCloseEventListener([=](const D1CandleCloseEvent& e) { strategy->on_D1CandleClose(e); }); } },
+        { Event::On::W1CandleClose,  [=]() { return new W1CandleCloseEventListener([=](const W1CandleCloseEvent& e) { strategy->on_W1CandleClose(e); }); } },
+        { Event::On::M1CandleClose,  [=]() { return new M1CandleCloseEventListener([=](const M1CandleCloseEvent& e) { strategy->on_M1CandleClose(e); }); } },
+        { Event::On::M4CandleClose,  [=]() { return new M4CandleCloseEventListener([=](const M4CandleCloseEvent& e) { strategy->on_M4CandleClose(e); }); } },
+        { Event::On::M6CandleClose,  [=]() { return new M6CandleCloseEventListener([=](const M6CandleCloseEvent& e) { strategy->on_M6CandleClose(e); }); } },
+        { Event::On::Y1CandleClose,  [=]() { return new Y1CandleCloseEventListener([=](const Y1CandleCloseEvent& e) { strategy->on_Y1CandleClose(e); }); } },
+    };
+
+    auto it = factoryMap.find(eventType);
+    if (it != factoryMap.end())
+    {
+        IEventListener* listener = it->second();
+        subscribe(listener);
+    }
+}
+#ifndef TRADINGBOT_H
+#define TRADINGBOT_H
+
+#include <QObject>
+#include "trading/TradingController.h"
+#include <initializer_list>
+
+
+class IEventListener;
+class TradingStrategy;
+
+class TradingBot : public QObject
+{
+    Q_OBJECT
+public:
+    explicit TradingBot(TradingStrategy *strategy, TradingController *controller);
+
+    static void setFactory(std::function<TradingBot*(TradingController*)> factory);
+    static TradingBot *create(TradingController*);
+
+    void listenTo(TradingStrategy* strategy, std::initializer_list<Event::On> eventTypes);
+    void listenTo(TradingStrategy *strategy, Event::On eventType);
+
+private:
+    void subscribe(IEventListener *listener);
+
+    static std::function<TradingBot*(TradingController*)> FACTORY;
+    TradingController *controller;
+    TradingStrategy *strategy;
+signals:
+};
+
+#endif // TRADINGBOT_H
+#ifndef EVENTOBSERVER_H
+#define EVENTOBSERVER_H
+
+#include <QObject>
+#include <QTimer>
+#include "trading/event/EventHandler.h"
+#include "trading/event/Event.h"
+#include "trading/event/observer/CandleCloseEventObserver.h"
+
+class EventObserver : public QObject
+{
+    Q_OBJECT
+public:
+    explicit EventObserver(EventHandler* handler, QObject* parent = nullptr)
+        : QObject(parent), eventHandler(handler)
+        , candleObserver(new CandleCloseEventObserver(handler, this))
+    {
+        timer.setInterval(100);
+        connect(&timer, &QTimer::timeout, this, &EventObserver::pollEvents);
+        timer.start();
+    }
+
+    void raiseEvent(const Event& event) {
+        if (eventHandler) {
+            eventHandler->dispatch(event);
+        }
+    }
+
+private slots:
+    void pollEvents() {
+
+        // poll for candle close events
+        candleObserver->poll();
+    }
+
+private:
+    EventHandler* eventHandler = nullptr;  // Not owned
+    QScopedPointer<CandleCloseEventObserver> candleObserver;
+    QTimer timer;
+};
+
+#endif // EVENTOBSERVER_H
+#ifndef EVENTLISTENER_H
+#define EVENTLISTENER_H
+
+#include <QObject>
+#include <functional>
+#include "trading/event/Event.h"
+#include "trading/event/IEventListener.h"
+#include "trading/TradingBot.h"
+
+template <typename TEvent>
+class EventListener : public IEventListener
+{
+    static_assert(std::is_base_of<Event, TEvent>::value, "TEvent must derive from Event");
+
+public:
+    EventListener(Event::On type, std::function<void(const TEvent&)> action)
+        : m_type(type), m_action(std::move(action)) {}
+
+    Event::On type() const override { return m_type; }
+
+    void handleEvent(const Event &event) override {
+        if (event.type() == m_type) {
+            if (const TEvent *specific = dynamic_cast<const TEvent*>(&event)) {
+                m_action(*specific);
+            }
+        }
+    }
+
+protected:
+    Event::On m_type;
+    std::function<void(const TEvent&)> m_action;
+};
+
+#endif // EVENTLISTENER_H
+#ifndef EVENTHANDLER_H
+#define EVENTHANDLER_H
+
+#include <QMap>
+#include <QList>
+#include <QObject>
+#include "trading/event/IEventListener.h"
+
+class EventHandler : public QObject
+{
+    Q_OBJECT
+public:
+    explicit EventHandler(QObject *parent = nullptr)
+        : QObject(parent)
+    {}
+
+    // Subscribe registers listener and connects to its destroyed signal
+    void subscribe(IEventListener* listener) {
+        listeners[listener->type()].append(listener);
+    }
+
+    void dispatch(const Event& event) {
+        auto it = listeners.find(event.type());
+        if (it != listeners.end()) {
+            // Use a copy of the list to prevent issues if listeners are removed during iteration
+            QList<IEventListener*> currentListeners = it.value();
+            for (auto* listener : currentListeners) {
+                if (listener) {
+                    listener->handleEvent(event);
+                }
+            }
+        }
+    }
+
+    // Clears all listeners (called when you want to reset the handler)
+    void reset() {
+        for (auto it = listeners.begin(); it != listeners.end(); ++it) {
+            QList<IEventListener*>& lst = it.value();
+            for (IEventListener* listener : lst) {
+                if (listener) {
+                    delete listener;
+                }
+            }
+        }
+        listeners.clear();
+    }
+
+private:
+    QMap<Event::On, QList<IEventListener*>> listeners;
+};
+
+#endif // EVENTHANDLER_H
+#ifndef STOPEVENT_H
+#define STOPEVENT_H
+
+
+#include <QObject>
+
+#include "trading/event/Event.h"
+
+class StopEvent : public Event
+{
+public:
+    StopEvent() : Event() {}
+
+    On type() const override { return On::Stop; }
+
+signals:
+};
+
+
+#endif // STOPEVENT_H
+#ifndef CANDLECLOSE_H
+#define CANDLECLOSE_H
+
+#include <QDateTime>
+#include "trading/event/Event.h"
+#include "trading/model/Candle.h"
+
+// Abstract base class for all candle close events (e.g., M5, M1)
+class CandleClose : public Event
+{
+public:
+    CandleClose() : Event() {}
+
+    // Every derived candle close event must implement this
+    virtual void setCloseTime(const QDateTime& time) = 0;
+    virtual void setCandle(const Candle& candle) = 0;
+
+    // Optional: base class can offer read access if desired
+    virtual QDateTime closeTime() const = 0;
+    virtual Candle candle() const = 0;
+};
+
+#endif // CANDLECLOSE_H
+#ifndef CANDLECLOSEEVENTS_H
+#define CANDLECLOSEEVENTS_H
+
+
+#include "trading/event/type/CandleClose.h"
+
+// Macro to reduce boilerplate
+#define DECLARE_CANDLE_CLOSE_EVENT_CLASS(className, enumName)      \
+class className##CandleCloseEvent : public CandleClose             \
+{                                                      \
+    public:                                                           \
+    className##CandleCloseEvent() \
+    : CandleClose() {}                                   \
+                                                                  \
+        On type() const override { return On::enumName; }             \
+                                                                  \
+        void setCloseTime(const QDateTime& time) override {           \
+            m_closeTime = time;                                        \
+    }                                                             \
+                                                                  \
+        void setCandle(const Candle& candle) override {               \
+            m_candle = candle;                                         \
+    }                                                             \
+                                                                  \
+        QDateTime closeTime() const override { return m_closeTime; }  \
+        Candle candle() const override { return m_candle; }           \
+                                                                  \
+    private:                                                          \
+    QDateTime m_closeTime;                                         \
+        Candle m_candle;                                               \
+};
+
+// Declare all classes here
+
+DECLARE_CANDLE_CLOSE_EVENT_CLASS(m1, m1CandleClose)
+DECLARE_CANDLE_CLOSE_EVENT_CLASS(m5, m5CandleClose)
+DECLARE_CANDLE_CLOSE_EVENT_CLASS(m15, m15CandleClose)
+DECLARE_CANDLE_CLOSE_EVENT_CLASS(m30, m30CandleClose)
+DECLARE_CANDLE_CLOSE_EVENT_CLASS(H1, H1CandleClose)
+DECLARE_CANDLE_CLOSE_EVENT_CLASS(H2, H2CandleClose)
+DECLARE_CANDLE_CLOSE_EVENT_CLASS(H4, H4CandleClose)
+DECLARE_CANDLE_CLOSE_EVENT_CLASS(H8, H8CandleClose)
+DECLARE_CANDLE_CLOSE_EVENT_CLASS(H12, H12CandleClose)
+DECLARE_CANDLE_CLOSE_EVENT_CLASS(D1, D1CandleClose)
+DECLARE_CANDLE_CLOSE_EVENT_CLASS(W1, W1CandleClose)
+DECLARE_CANDLE_CLOSE_EVENT_CLASS(M1, M1CandleClose)
+DECLARE_CANDLE_CLOSE_EVENT_CLASS(M4, M4CandleClose)
+DECLARE_CANDLE_CLOSE_EVENT_CLASS(M6, M6CandleClose)
+DECLARE_CANDLE_CLOSE_EVENT_CLASS(Y1, Y1CandleClose)
+
+#undef DECLARE_CANDLE_CLOSE_EVENT_CLASS
+
+#endif // CANDLECLOSEEVENTS_H
+#ifndef STARTEVENT_H
+#define STARTEVENT_H
+
+#include <QObject>
+
+#include "trading/event/Event.h"
+
+class StartEvent : public Event
+{
+public:
+    StartEvent() : Event() {}
+
+    On type() const override { return On::Start; }
+signals:
+};
+
+#endif // STARTEVENT_H
+#ifndef PAUSEEVENT_H
+#define PAUSEEVENT_H
+
+
+#include "trading/event/Event.h"
+
+class PauseEvent : public Event
+{
+public:
+    PauseEvent() : Event() {}
+
+    On type() const override { return On::Pause; }
+signals:
+};
+
+
+#endif // PAUSEEVENT_H
+#ifndef UNPAUSEEVENT_H
+#define UNPAUSEEVENT_H
+
+#include <QObject>
+
+#include "trading/event/Event.h"
+
+class UnpauseEvent : public Event
+{
+public:
+    UnpauseEvent() : Event() {}
+
+    On type() const override { return On::Unpause; }
+signals:
+};
+
+
+#endif // UNPAUSEEVENT_H
+#include "CandleCloseEventObserver.h"
+#include <QtGlobal>
+#include <QDateTime>
+#include <QTimeZone>
+
+// We need to include all of the autogenerated CandleCloseEvent subclasses:
+#include "trading/event/type/CandleCloseEvents.h"
+
+CandleCloseEventObserver::CandleCloseEventObserver(EventHandler* handler, QObject* parent)
+    : QObject(parent), eventHandler(handler)
+{
+    // Get “now” in UTC once, so that all initial lastDispatched values line up to the same moment.
+    const QDateTime nowUtc = QDateTime::currentDateTimeUtc();
+
+    //
+    // Register every interval we care about. Each call to registerCandleEvent()
+    // will store the factory and initialize lastDispatched[interval] so that we
+    // do NOT fire any past‐history events. Only future closes (i.e. “new” closes)
+    // will ever get dispatched from poll().
+    //
+
+    // 1-minute
+    registerCandleEvent(1, [](){ return new m1CandleCloseEvent(); });
+    // 5-minute
+    registerCandleEvent(5, [](){ return new m5CandleCloseEvent(); });
+    // 15-minute
+    registerCandleEvent(15, [](){ return new m15CandleCloseEvent(); });
+    // 30-minute
+    registerCandleEvent(30, [](){ return new m30CandleCloseEvent(); });
+    // 1-hour = 60 min
+    registerCandleEvent(60, [](){ return new H1CandleCloseEvent(); });
+    // 2-hour = 120 min
+    registerCandleEvent(120, [](){ return new H2CandleCloseEvent(); });
+    // 4-hour = 240 min
+    registerCandleEvent(240, [](){ return new H4CandleCloseEvent(); });
+    // 8-hour = 480 min
+    registerCandleEvent(480, [](){ return new H8CandleCloseEvent(); });
+    // 12-hour = 720 min
+    registerCandleEvent(720, [](){ return new H12CandleCloseEvent(); });
+    // 1-day = 1440 min
+    registerCandleEvent(1440, [](){ return new D1CandleCloseEvent(); });
+    // 1-week = 10080 min (7 days × 24 h × 60 min)
+    registerCandleEvent(10080, [](){ return new W1CandleCloseEvent(); });
+    // 1-month (special): we use 43200 as a “marker” for monthly
+    registerCandleEvent(43200, [](){ return new M1CandleCloseEvent(); });
+    // 4-month
+    registerCandleEvent(4 * 43200, [](){ return new M4CandleCloseEvent(); });
+    // 6-month
+    registerCandleEvent(6 * 43200, [](){ return new M6CandleCloseEvent(); });
+    // 1-year (special): we use 525600 as a “marker” for yearly
+    registerCandleEvent(525600, [](){ return new Y1CandleCloseEvent(); });
+
+    //
+    // Additional “month”“year”‐aligned intervals may be registered the same way:
+    // e.g. if someone wanted a 2-month candle, they could register 2*43200 here, etc.
+    //
+}
+
+void CandleCloseEventObserver::registerCandleEvent(int intervalMinutes, std::function<CandleClose*()> factory)
+{
+    // Store the factory
+    candleFactories.insert(intervalMinutes, factory);
+
+    // Compute and store the “last discharged” close‐time so that we do not fire historical events.
+    const QDateTime nowUtc = QDateTime::currentDateTimeUtc();
+    QDateTime lastClose;
+
+    if (intervalMinutes == 43200) {
+        // “monthly” boundary
+        lastClose = calculateLastMonthlyClose(nowUtc);
+    }
+    else if (intervalMinutes == 525600) {
+        // “yearly” boundary
+        lastClose = calculateLastYearlyClose(nowUtc);
+    }
+    else {
+        // fixed‐minute interval
+        lastClose = calculateLastFixedCandleClose(nowUtc, intervalMinutes);
+    }
+
+    lastDispatched.insert(intervalMinutes, lastClose);
+}
+
+void CandleCloseEventObserver::poll()
+{
+    const QDateTime nowUtc = QDateTime::currentDateTimeUtc();
+
+    // For every registered interval, check whether “now” has crossed a new close boundary.
+    for (auto it = candleFactories.constBegin(); it != candleFactories.constEnd(); ++it) {
+        int interval = it.key();
+        const auto& factory = it.value();
+
+        // Determine what the “latest close” would be, as of now.
+        QDateTime latestClose;
+        if (interval == 43200) {
+            latestClose = calculateLastMonthlyClose(nowUtc);
+        }
+        else if (interval == 525600) {
+            latestClose = calculateLastYearlyClose(nowUtc);
+        }
+        else {
+            latestClose = calculateLastFixedCandleClose(nowUtc, interval);
+        }
+
+        // Check if we have already dispatched that timestamp. If not, fire exactly one event.
+        const QDateTime& lastSent = lastDispatched.value(interval);
+        if (latestClose > lastSent) {
+            // Create the event, set its close‐time, and hand it off to EventHandler.
+            CandleClose* evt = factory();
+            evt->setCloseTime(latestClose);
+
+            // If you have a way to fill in actual Candle data (OHLC), you can do so here:
+            //    Candle c = fetchCandleData(interval, latestClose);
+            //    evt->setCandle(c);
+            //
+            // For now, we simply dispatch the close time and leave the Candle object empty.
+
+            eventHandler->dispatch(*evt);
+            delete evt;
+
+            // Update “lastDispatched” so we don’t fire again for the same timestamp.
+            lastDispatched[interval] = latestClose;
+        }
+    }
+}
+
+QDateTime CandleCloseEventObserver::calculateLastFixedCandleClose(const QDateTime& nowUtc, int intervalMinutes) const
+{
+    // Convert nowUtc to epoch‐seconds (UTC)
+    qint64 secsSinceEpoch = nowUtc.toSecsSinceEpoch();
+
+    // Number of seconds per candle
+    qint64 intervalSecs = static_cast<qint64>(intervalMinutes) * 60;
+
+    // How many complete intervals have passed since epoch?
+    qint64 bucketCount = secsSinceEpoch / intervalSecs;
+
+    // The last close time is bucketCount * intervalSecs
+    qint64 lastCloseSecs = bucketCount * intervalSecs;
+
+    return QDateTime::fromSecsSinceEpoch(lastCloseSecs, QTimeZone::UTC);
+}
+
+QDateTime CandleCloseEventObserver::calculateLastMonthlyClose(const QDateTime& nowUtc) const
+{
+    // Extract date (UTC) from QDateTime
+    QDate d = nowUtc.date();
+
+    // Build a QDateTime for the first of THIS month at 00:00 UTC
+    QDate firstOfThisMonth(d.year(), d.month(), 1);
+    QDateTime dtFirstOfThisMonth(firstOfThisMonth, QTime(0,0,0), QTimeZone::UTC);
+
+    if (nowUtc >= dtFirstOfThisMonth) {
+        // That instant is precisely the close of last month
+        return dtFirstOfThisMonth;
+    }
+    else {
+        // We are still in the first instant of the month—so we must go back to previous month
+        int year = d.year();
+        int month = d.month() - 1;
+        if (month < 1) {
+            month = 12;
+            year -= 1;
+        }
+        QDate previousMonthFirst(year, month, 1);
+        return QDateTime(previousMonthFirst, QTime(0,0,0), QTimeZone::UTC);
+    }
+}
+
+QDateTime CandleCloseEventObserver::calculateLastYearlyClose(const QDateTime& nowUtc) const
+{
+    // Extract date (UTC) from QDateTime
+    QDate d = nowUtc.date();
+
+    // Build a QDateTime for Jan 1 of THIS year at 00:00 UTC
+    QDate firstOfThisYear(d.year(), 1, 1);
+    QDateTime dtFirstOfThisYear(firstOfThisYear, QTime(0,0,0), QTimeZone::UTC);
+
+    if (nowUtc >= dtFirstOfThisYear) {
+        // That instant is precisely the close of last year
+        return dtFirstOfThisYear;
+    }
+    else {
+        // We are still in the first instant of the year—so we must go back to previous year
+        int year = d.year() - 1;
+        QDate firstOfPrevYear(year, 1, 1);
+        return QDateTime(firstOfPrevYear, QTime(0,0,0), QTimeZone::UTC);
+    }
+}
+#ifndef CANDLECLOSEEVENTOBSERVER_H
+#define CANDLECLOSEEVENTOBSERVER_H
+
+#include <QObject>
+#include <QDateTime>
+#include <QMap>
+#include <functional>
+
+#include "trading/event/EventHandler.h"
+#include "trading/event/type/CandleClose.h"
+/*
+ * CandleCloseEventObserver
+ *
+ * - Registers one factory per interval (in minutes). For “month” we use 43200,
+ *   and for “year” we use 525600, as described below.
+ *
+ * - On construction, each interval’s “lastDispatched” is set to the most recent close
+ *   (so that we do not immediately fire a ton of historical events).
+ *
+ * - poll() should be called frequently (e.g. every 100 ms). Each time it runs,
+ *   it computes what “now”’s latest candle‐close should be. If that timestamp is
+ *   strictly greater than what we last dispatched for that interval, we create a new
+ *   CandleClose* via the factory, set its closeTime, hand it off to EventHandler,
+ *   and update lastDispatched.
+ *
+ *   – Fixed‐minute intervals (1, 5, 15, 30, 60, 120, 240, 480, 720, 1440, 10080, etc.)
+ *     are handled by integer division of the UTC epoch. E.g. for an N‐minute candle:
+ *       QDateTime::currentDateTimeUtc().toSecsSinceEpoch() / (N*60)
+ *     yields the “number of full N‐minute buckets since epoch,” then we multiply
+ *     back by N*60 to recover the exact close time in epoch‐seconds.
+ *
+ *   – For “month” (intervalMinutes = 43200), we compute the very latest “first‐of‐month 00:00 UTC”
+ *     that is ≤ now. That first‐of‐this‐month 00:00 UTC is when the last month closed.
+ *
+ *   – For “year” (intervalMinutes = 525600), we compute the very latest “January 1 00:00 UTC”
+ *     that is ≤ now. That Jan 1 00:00 UTC is when the last year closed.
+ *
+ * Usage example (in your application startup):
+ *
+ *   auto handler = new EventHandler(...);
+ *   auto observer = new CandleCloseEventObserver(handler, parentQObject);
+ *   // Internally, constructor has called registerCandleEvent(...) for all known intervals.
+ *   // Then your main loop should call observer->poll() every 100 ms or so.
+ *
+ */
+
+class CandleCloseEventObserver : public QObject
+{
+    Q_OBJECT
+
+public:
+    explicit CandleCloseEventObserver(EventHandler* handler, QObject* parent = nullptr);
+
+    /// Called periodically (e.g. every 100 ms) by whatever scheduler you have.
+    void poll();
+
+private:
+    /// Register a factory that produces a new CandleClose subclass (e.g. m1CandleCloseEvent)
+    /// whenever a candle of `intervalMinutes` must be fired.
+    ///
+    /// intervalMinutes:
+    ///   - For truly fixed‐minute intervals, use 1, 5, 15, 30, 60, 120, 240, 480, 720, 1440, 10080, etc.
+    ///   - For “month,” pass 43200 (i.e. 30 days × 24 h × 60 min = 43200).
+    ///     (Actually “month” means “monthly boundary,” which we compute as first-of-month 00:00 UTC.)
+    ///   - For “year,” pass 525600 (i.e. 365 days × 24 h × 60 min = 525600).
+    ///     (Actually “year” means “yearly boundary,” which we compute as Jan 1 00:00 UTC.)
+    void registerCandleEvent(int intervalMinutes, std::function<CandleClose*()> factory);
+
+    /// Given “now” and a fixed‐minute interval (e.g. 5), return the QDateTime (UTC)
+    /// of the last time that an N‐minute candle exactly closed.
+    QDateTime calculateLastFixedCandleClose(const QDateTime& nowUtc, int intervalMinutes) const;
+
+    /// Given “now,” return the QDateTime (UTC) of the most recent “first of month 00:00 UTC”
+    /// that is ≤ nowUtc. That instant is when the previous monthly candle closed.
+    QDateTime calculateLastMonthlyClose(const QDateTime& nowUtc) const;
+
+    /// Given “now,” return the QDateTime (UTC) of the most recent “January 1 00:00 UTC”
+    /// that is ≤ nowUtc. That instant is when the previous yearly candle closed.
+    QDateTime calculateLastYearlyClose(const QDateTime& nowUtc) const;
+
+private:
+    EventHandler* eventHandler;
+    QMap<int, std::function<CandleClose*()>> candleFactories;  // interval → factory
+    QMap<int, QDateTime> lastDispatched;                       // interval → last close‐time we fired
+};
+
+#endif // CANDLECLOSEEVENTOBSERVER_H
+#ifndef EVENT_H
+#define EVENT_H
+
+#include <QObject>
+
+class Event
+{
+public:
+    enum class On {
+        Start = 0, Pause, Unpause, Stop,
+
+        m1CandleClose,
+        m5CandleClose,
+        m15CandleClose,
+        m30CandleClose,
+        H1CandleClose,
+        H2CandleClose,
+        H4CandleClose,
+        H8CandleClose,
+        H12CandleClose,
+        D1CandleClose,
+        W1CandleClose,
+        M1CandleClose,
+        M4CandleClose,
+        M6CandleClose,
+        Y1CandleClose,
+
+    };
+
+    Event() {}
+    virtual ~Event() = default;
+
+    virtual On type() const = 0;
+signals:
+};
+
+#endif // EVENT_H
+#ifndef IEVENTLISTENER_H
+#define IEVENTLISTENER_H
+
+#include "Event.h"
+
+class IEventListener {
+public:
+    virtual ~IEventListener() = default;
+    virtual Event::On type() const = 0;
+    virtual void handleEvent(const Event &event) = 0;
+};
+
+#endif // IEVENTLISTENER_H
+#ifndef STOPEVENTLISTENER_H
+#define STOPEVENTLISTENER_H
+
+#include "trading/event/EventListener.h"
+#include "trading/event/type/StopEvent.h"
+
+class StopEventListener : public EventListener<StopEvent>
+{
+public:
+    StopEventListener(std::function<void(const StopEvent&)> action)
+        : EventListener<StopEvent>(Event::On::Stop, std::move(action)) {}
+};
+
+
+#endif // STOPEVENTLISTENER_H
+#ifndef STARTEVENTLISTENER_H
+#define STARTEVENTLISTENER_H
+
+#include "trading/event/EventListener.h"
+#include "trading/event/type/StartEvent.h"
+
+class StartEventListener : public EventListener<StartEvent>
+{
+public:
+    StartEventListener(std::function<void(const StartEvent&)> action)
+        : EventListener<StartEvent>(Event::On::Start, std::move(action)) {}
+};
+
+#endif // STARTEVENTLISTENER_H
+#ifndef CANDLECLOSEEVENTLISTENERS_H
+#define CANDLECLOSEEVENTLISTENERS_H
+
+#include "trading/event/EventListener.h"
+#include "trading/event/type/CandleCloseEvents.h"
+
+// Macro to simplify listener declarations
+#define DECLARE_CANDLE_CLOSE_EVENT_LISTENER(className) \
+class className##CandleCloseEventListener : public EventListener<className##CandleCloseEvent> \
+{ \
+    public: \
+    className##CandleCloseEventListener(std::function<void(const className##CandleCloseEvent&)> action) \
+    : EventListener<className##CandleCloseEvent>(Event::On::className##CandleClose, std::move(action)) {} \
+};
+
+// Declare all listeners
+DECLARE_CANDLE_CLOSE_EVENT_LISTENER(m1)
+DECLARE_CANDLE_CLOSE_EVENT_LISTENER(m5)
+DECLARE_CANDLE_CLOSE_EVENT_LISTENER(m15)
+DECLARE_CANDLE_CLOSE_EVENT_LISTENER(m30)
+DECLARE_CANDLE_CLOSE_EVENT_LISTENER(H1)
+DECLARE_CANDLE_CLOSE_EVENT_LISTENER(H2)
+DECLARE_CANDLE_CLOSE_EVENT_LISTENER(H4)
+DECLARE_CANDLE_CLOSE_EVENT_LISTENER(H8)
+DECLARE_CANDLE_CLOSE_EVENT_LISTENER(H12)
+DECLARE_CANDLE_CLOSE_EVENT_LISTENER(D1)
+DECLARE_CANDLE_CLOSE_EVENT_LISTENER(W1)
+DECLARE_CANDLE_CLOSE_EVENT_LISTENER(M1)
+DECLARE_CANDLE_CLOSE_EVENT_LISTENER(M4)
+DECLARE_CANDLE_CLOSE_EVENT_LISTENER(M6)
+DECLARE_CANDLE_CLOSE_EVENT_LISTENER(Y1)
+
+#undef DECLARE_CANDLE_CLOSE_EVENT_LISTENER
+
+#endif // CANDLECLOSEEVENTLISTENERS_H
+#ifndef UNPAUSEEVENTLISTENER_H
+#define UNPAUSEEVENTLISTENER_H
+
+#include "trading/event/EventListener.h"
+#include "trading/event/type/UnpauseEvent.h"
+
+class UnpauseEventListener : public EventListener<UnpauseEvent>
+{
+public:
+    UnpauseEventListener(std::function<void(const UnpauseEvent&)> action)
+        : EventListener<UnpauseEvent>(Event::On::Unpause, std::move(action)) {}
+};
+
+
+#endif // UNPAUSEEVENTLISTENER_H
+#ifndef PAUSEEVENTLISTENER_H
+#define PAUSEEVENTLISTENER_H
+
+#include "trading/event/EventListener.h"
+#include "trading/event/type/PauseEvent.h"
+
+class PauseEventListener : public EventListener<PauseEvent>
+{
+public:
+    PauseEventListener(std::function<void(const PauseEvent&)> action)
+        : EventListener<PauseEvent>(Event::On::Pause, std::move(action)) {}
+};
+
+
+
+#endif // PAUSEEVENTLISTENER_H
+#ifndef MAINWINDOW_H
+#define MAINWINDOW_H
+
+#include <QMainWindow>
+
+#include "trading/TradingController.h"
+
+QT_BEGIN_NAMESPACE
+namespace Ui {
+class MainWindow;
+}
+QT_END_NAMESPACE
+
+class MainWindow : public QMainWindow
+{
+    Q_OBJECT
+
+public:
+    MainWindow(QWidget *parent = nullptr);
+    ~MainWindow();
+
+private:
+    Ui::MainWindow *ui;
+    TradingController *controller;
+};
+#endif // MAINWINDOW_H
+/********************************************************************************
+** Form generated from reading UI file 'MainWindow.ui'
+**
+** Created by: Qt User Interface Compiler version 5.15.17
+**
+** WARNING! All changes made in this file will be lost when recompiling UI file!
+********************************************************************************/
+
+#ifndef UI_MAINWINDOW_H
+#define UI_MAINWINDOW_H
+
+#include <QtCore/QVariant>
+#include <QtWidgets/QApplication>
+#include <QtWidgets/QMainWindow>
+#include <QtWidgets/QMenuBar>
+#include <QtWidgets/QStatusBar>
+#include <QtWidgets/QWidget>
+
+QT_BEGIN_NAMESPACE
+
+class Ui_MainWindow
+{
+public:
+    QWidget *centralwidget;
+    QMenuBar *menubar;
+    QStatusBar *statusbar;
+
+    void setupUi(QMainWindow *MainWindow)
+    {
+        if (MainWindow->objectName().isEmpty())
+            MainWindow->setObjectName(QString::fromUtf8("MainWindow"));
+        MainWindow->resize(800, 600);
+        centralwidget = new QWidget(MainWindow);
+        centralwidget->setObjectName(QString::fromUtf8("centralwidget"));
+        MainWindow->setCentralWidget(centralwidget);
+        menubar = new QMenuBar(MainWindow);
+        menubar->setObjectName(QString::fromUtf8("menubar"));
+        menubar->setGeometry(QRect(0, 0, 800, 22));
+        MainWindow->setMenuBar(menubar);
+        statusbar = new QStatusBar(MainWindow);
+        statusbar->setObjectName(QString::fromUtf8("statusbar"));
+        MainWindow->setStatusBar(statusbar);
+
+        retranslateUi(MainWindow);
+
+        QMetaObject::connectSlotsByName(MainWindow);
+    } // setupUi
+
+    void retranslateUi(QMainWindow *MainWindow)
+    {
+        MainWindow->setWindowTitle(QCoreApplication::translate("MainWindow", "MainWindow", nullptr));
+    } // retranslateUi
+
+};
+
+namespace Ui {
+    class MainWindow: public Ui_MainWindow {};
+} // namespace Ui
+
+QT_END_NAMESPACE
+
+#endif // UI_MAINWINDOW_H
+#include "MainWindow.h"
+#include "ui_MainWindow.h"
+
+#include <QVBoxLayout>
+#include "widget/BotControlWidget.h"
+
+MainWindow::MainWindow(QWidget *parent)
+    : QMainWindow(parent)
+    , ui(new Ui::MainWindow)
+    , controller(new TradingController{})
+{
+    ui->setupUi(this);
+
+    QWidget* central = new QWidget(this);
+    QVBoxLayout* vbox = new QVBoxLayout(central);
+    BotControlWidget* botWidget = new BotControlWidget(controller, central);
+    vbox->addWidget(botWidget);
+    setCentralWidget(central);
+}
+
+MainWindow::~MainWindow()
+{
+    delete ui;
+}
+#ifndef CUSTOMTRADINGSTRATEGY_H
+#define CUSTOMTRADINGSTRATEGY_H
+
+#include "trading/TradingStrategy.h"
+
+
+class CustomTradingStrategy : public TradingStrategy
+{
+public:
+    explicit CustomTradingStrategy(TradingAPI *api, TradingBot *parent = nullptr);
+
+    void on_Start(const StartEvent& event) override;
+    void on_Pause(const PauseEvent& event) override;
+    void on_Unpause(const UnpauseEvent& event) override;
+    void on_Stop(const StopEvent& event) override;
+
+};
+
+#endif // CUSTOMTRADINGSTRATEGY_H
+#include "CustomTradingAPI.h"
+
+CustomTradingAPI::CustomTradingAPI() {}
+#include "CustomTradingStrategy.h"
+
+#include "trading/event/type/StartEvent.h"
+#include "trading/event/type/StopEvent.h"
+#include "trading/event/type/PauseEvent.h"
+#include "trading/event/type/UnpauseEvent.h"
+
+CustomTradingStrategy::CustomTradingStrategy(TradingAPI *api, TradingBot *tradingBot)
+    : TradingStrategy{api, tradingBot}
+{
+
+    tradingBot->listenTo(this, { On::Start });
+}
+
+void CustomTradingStrategy::on_Start(const StartEvent& event)
+{
+    qDebug() << "Event (" << static_cast<int>(event.type()) << ") called";
+}
+
+void CustomTradingStrategy::on_Pause(const PauseEvent& event)
+{
+    qDebug() << "Event (" << static_cast<int>(event.type()) << ") called";
+}
+
+void CustomTradingStrategy::on_Unpause(const UnpauseEvent& event)
+{
+    qDebug() << "Event (" << static_cast<int>(event.type()) << ") called";
+}
+
+void CustomTradingStrategy::on_Stop(const StopEvent& event)
+{
+    qDebug() << "Event (" << static_cast<int>(event.type()) << ") called";
+}
+#ifndef CUSTOMTRADINGAPI_H
+#define CUSTOMTRADINGAPI_H
+
+#include "trading/api/TradingAPI.h"
+
+class CustomTradingAPI : public TradingAPI
+{
+public:
+    CustomTradingAPI();
+};
+
+#endif // CUSTOMTRADINGAPI_H
+#include "MainWindow.h"
+#include "trading/Application.h"
+
+#include "custom/CustomTradingAPI.h"
+#include "custom/CustomTradingStrategy.h"
+
+#include <QApplication>
+
+int main(int argc, char *argv[])
+{
+    QApplication a(argc, argv);
+    MainWindow w;
+
+    DynalgoApplication::Start<CustomTradingStrategy, CustomTradingAPI>();
+
+    w.show();
+    return a.exec();
+}

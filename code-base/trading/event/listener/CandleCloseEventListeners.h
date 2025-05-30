@@ -1,0 +1,35 @@
+#ifndef CANDLECLOSEEVENTLISTENERS_H
+#define CANDLECLOSEEVENTLISTENERS_H
+
+#include "trading/event/EventListener.h"
+#include "trading/event/type/CandleCloseEvents.h"
+
+// Macro to simplify listener declarations
+#define DECLARE_CANDLE_CLOSE_EVENT_LISTENER(className) \
+class className##CandleCloseEventListener : public EventListener<className##CandleCloseEvent> \
+{ \
+    public: \
+    className##CandleCloseEventListener(std::function<void(const className##CandleCloseEvent&)> action) \
+    : EventListener<className##CandleCloseEvent>(Event::On::className##CandleClose, std::move(action)) {} \
+};
+
+// Declare all listeners
+DECLARE_CANDLE_CLOSE_EVENT_LISTENER(m1)
+DECLARE_CANDLE_CLOSE_EVENT_LISTENER(m5)
+DECLARE_CANDLE_CLOSE_EVENT_LISTENER(m15)
+DECLARE_CANDLE_CLOSE_EVENT_LISTENER(m30)
+DECLARE_CANDLE_CLOSE_EVENT_LISTENER(H1)
+DECLARE_CANDLE_CLOSE_EVENT_LISTENER(H2)
+DECLARE_CANDLE_CLOSE_EVENT_LISTENER(H4)
+DECLARE_CANDLE_CLOSE_EVENT_LISTENER(H8)
+DECLARE_CANDLE_CLOSE_EVENT_LISTENER(H12)
+DECLARE_CANDLE_CLOSE_EVENT_LISTENER(D1)
+DECLARE_CANDLE_CLOSE_EVENT_LISTENER(W1)
+DECLARE_CANDLE_CLOSE_EVENT_LISTENER(M1)
+DECLARE_CANDLE_CLOSE_EVENT_LISTENER(M4)
+DECLARE_CANDLE_CLOSE_EVENT_LISTENER(M6)
+DECLARE_CANDLE_CLOSE_EVENT_LISTENER(Y1)
+
+#undef DECLARE_CANDLE_CLOSE_EVENT_LISTENER
+
+#endif // CANDLECLOSEEVENTLISTENERS_H
